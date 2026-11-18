@@ -1,7 +1,7 @@
 # Tin Lock Click Game
 
-I'm Wendle, a tiny apprentice wizard, and this is a little game about trying my brass key on the cupboards in the tower. The right lock gives a soft click.
+I'm Wendle, a tiny apprentice wizard, and this is a little game about trying my brass key on the cupboards in the tower. Only one lock is the right one.
 
-Right now (step 2 of 5) the row of tower cupboards is drawn and my brass key follows your pointer around. Checking the locks, the click and the glow are coming in the next steps.
+Right now (step 3 of 5) the key follows your pointer and the game checks which lock it fits. Move the key tip over a keyhole and its plate gets a bright ring, then click or tap to try it. A line under the picture tells you if it fits. The soft click sound and the glow are coming next.
 
-To play, open the page in a browser and move the mouse, or drag a finger on a phone. The key slides along behind it.
+To play, open the page and move the mouse, or tap on a phone. The key jumps to where you tap.
