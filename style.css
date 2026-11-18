@@ -16,4 +16,5 @@ canvas {
   background: #2c2850;
   border-radius: 10px;
   touch-action: none;
+  cursor: none;
 }
