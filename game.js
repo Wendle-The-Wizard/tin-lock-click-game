@@ -1,25 +1,29 @@
-// Step 4: a soft click sound when the key fits.
+// Step 5: a small glow when a cupboard opens.
 var canvas = document.getElementById('stage');
 var ctx = canvas.getContext('2d');
 var statusEl = document.getElementById('status');
+var soundBtn = document.getElementById('soundBtn');
+var soundNote = document.getElementById('soundNote');
+var againBtn = document.getElementById('again');
 
-var COUNT = 5; // cupboards in my row
+var COUNT = 5;
 var woods = ['#8a5a36', '#7b4f2e', '#9a6840', '#6f4528', '#8f5f3a'];
 var gap = 24;
 var cw = (canvas.width - gap * (COUNT + 1)) / COUNT;
 var ch = 260;
-// Oops lesson: I used to call this "top", but the browser already owns that name!
+// the browser owns the name "top", so I use topY
 var topY = 340 - ch;
 
-// the secret: one cupboard is the right one
 var rightOne = Math.floor(Math.random() * COUNT);
 var opened = -1;
+var openedAt = 0; // when it opened, for the glow
 var tries = 0;
+var soundOn = true;
+var sparks = [];
 
 var key = { x: canvas.width / 2, y: 250 };
 var target = { x: key.x, y: key.y };
 
-// ---- sound: a soft click made from a tiny noise burst and a low blip ----
 var audio = null;
 function getAudio() {
   if (!audio) {
@@ -31,14 +35,13 @@ function getAudio() {
 }
 
 function playClick() {
+  if (!soundOn) return;
   var a = getAudio();
   if (!a) return;
   var t = a.currentTime;
   var master = a.createGain();
   master.gain.value = 0.5;
   master.connect(a.destination);
-
-  // short burst of noise, filtered so it is soft not sharp
   var len = Math.floor(a.sampleRate * 0.04);
   var buf = a.createBuffer(1, len, a.sampleRate);
   var d = buf.getChannelData(0);
@@ -53,8 +56,6 @@ function playClick() {
   ng.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
   noise.connect(filt); filt.connect(ng); ng.connect(master);
   noise.start(t);
-
-  // low little blip, the "tock" of the bolt
   var o = a.createOscillator();
   o.type = 'sine';
   o.frequency.setValueAtTime(420, t);
@@ -71,7 +72,6 @@ function lockPos(i) {
   return { x: gap + i * (cw + gap) + cw / 2, y: topY + ch / 2 };
 }
 
-// which lock is the key tip near? returns -1 if none
 function nearLock() {
   for (var i = 0; i < COUNT; i++) {
     var p = lockPos(i);
@@ -106,7 +106,30 @@ function drawCupboard(i, hot) {
   ctx.fillRect(p.x - 1.5, p.y - 3, 3, 12);
 }
 
-// the brass key, tip up
+// the glow: a warm pulsing light around the opened cupboard, plus little sparks
+function drawGlow() {
+  if (opened < 0) return;
+  var p = lockPos(opened);
+  var age = (performance.now() - openedAt) / 1000;
+  var pulse = 0.75 + 0.25 * Math.sin(age * 3);
+  var burst = Math.max(0, 1 - age / 0.6); // extra flash at the start
+  var r = 90 + burst * 50;
+  var g = ctx.createRadialGradient(p.x, p.y, 4, p.x, p.y, r);
+  g.addColorStop(0, 'rgba(255,240,160,' + (0.85 * pulse) + ')');
+  g.addColorStop(1, 'rgba(255,200,80,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2);
+  for (var i = sparks.length - 1; i >= 0; i--) {
+    var s = sparks[i];
+    s.x += s.vx; s.y += s.vy; s.life -= 0.02;
+    if (s.life <= 0) { sparks.splice(i, 1); continue; }
+    ctx.fillStyle = 'rgba(255,240,170,' + s.life + ')';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 3 * s.life + 1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 function drawKey(x, y) {
   ctx.save();
   ctx.translate(x, y);
@@ -135,10 +158,10 @@ function draw() {
   ctx.fillRect(0, 340, canvas.width, 60);
   var near = nearLock();
   for (var i = 0; i < COUNT; i++) drawCupboard(i, i === near);
+  drawGlow();
   drawKey(key.x, key.y);
 }
 
-// pointer position -> canvas coordinates (canvas is scaled by CSS)
 function aim(e) {
   var r = canvas.getBoundingClientRect();
   target.x = (e.clientX - r.left) * canvas.width / r.width;
@@ -146,10 +169,7 @@ function aim(e) {
 }
 canvas.addEventListener('pointermove', aim);
 
-canvas.addEventListener('pointerdown', function (e) {
-  aim(e);
-  getAudio(); // wake the sound up on the first tap
-  key.x = target.x; key.y = target.y;
+function tryLock() {
   var i = nearLock();
   if (i < 0) {
     statusEl.textContent = 'The key is not at a lock. Line the tip up with a keyhole!';
@@ -159,14 +179,45 @@ canvas.addEventListener('pointerdown', function (e) {
     statusEl.textContent = 'Cupboard ' + (i + 1) + ' is already open.';
     return;
   }
+  if (opened >= 0) {
+    statusEl.textContent = 'I already found the right one! Press New game to hide it again.';
+    return;
+  }
   tries++;
   if (i === rightOne) {
     opened = i;
+    openedAt = performance.now();
+    var p = lockPos(i);
+    for (var k = 0; k < 24; k++) {
+      var ang = Math.random() * Math.PI * 2, sp = 0.5 + Math.random() * 2;
+      sparks.push({ x: p.x, y: p.y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 0.4, life: 1 });
+    }
     playClick();
-    statusEl.textContent = 'Cupboard ' + (i + 1) + ': it fits! Click! (after ' + tries + ' tries)';
+    statusEl.textContent = 'Cupboard ' + (i + 1) + ': it fits! Click! It glows! (after ' + tries + ' tries)';
+    soundNote.textContent = soundOn ? 'Sound: click played!' : 'Sound is off, so the click was silent.';
   } else {
     statusEl.textContent = 'Cupboard ' + (i + 1) + ': the key does not fit.';
   }
+}
+
+canvas.addEventListener('pointerdown', function (e) {
+  aim(e);
+  key.x = target.x; key.y = target.y;
+  if (soundOn && getAudio()) soundNote.textContent = 'Sound: ready';
+  tryLock();
+});
+
+soundBtn.addEventListener('click', function () {
+  soundOn = !soundOn;
+  soundBtn.textContent = 'Sound: ' + (soundOn ? 'on' : 'off');
+  if (soundOn) { getAudio(); playClick(); soundNote.textContent = 'Sound: on (that was a test click)'; }
+  else soundNote.textContent = 'Sound: off';
+});
+
+againBtn.addEventListener('click', function () {
+  rightOne = Math.floor(Math.random() * COUNT);
+  opened = -1; tries = 0; sparks = [];
+  statusEl.textContent = 'A new lock is hiding the secret. Try the key!';
 });
 
 function loop() {
